@@ -21,13 +21,11 @@ app.use("/api/excel", excelRoutes);
 
 app.use((err, _req, res, _next) => {
   const status = err.status || (err.code === "LIMIT_FILE_SIZE" ? 413 : 500);
-  res
-    .status(status)
-    .json({
-      success: false,
-      message: err.message || "Erreur interne du serveur",
-    });
+  res.status(status).json({
+    success: false,
+    message: err.message || "Erreur interne du serveur",
+  });
 });
 
-const port = process.env.PORT || 4000;
+const port = process.env.PORT || 5000;
 app.listen(port, () => console.log(`API sur http://localhost:${port}`));

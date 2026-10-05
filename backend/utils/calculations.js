@@ -1,34 +1,79 @@
-export const toNumber = (v) => {
-  if (v === null || v === undefined || v === "") return null;
-  const n =
-    typeof v === "number"
-      ? v
-      : Number(String(v).replace(",", ".").replace("%", "").trim());
-  return Number.isFinite(n) ? n : null;
+export const toNumber = (value) => {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  let text = String(value)
+    .trim()
+    .replace(/\u00A0/g, "")
+    .replace(/\s/g, "")
+    .replace("%", "");
+
+  if (!text) return null;
+
+  if (text.includes(",") && text.includes(".")) {
+    const lastComma = text.lastIndexOf(",");
+
+    const lastDot = text.lastIndexOf(".");
+
+    if (lastComma > lastDot) {
+      text = text.replace(/\./g, "").replace(",", ".");
+    } else {
+      text = text.replace(/,/g, "");
+    }
+  } else if (text.includes(",")) {
+    const parts = text.split(",");
+    const last = parts[parts.length - 1];
+
+    if (last.length === 3 && parts.length > 1) {
+      text = parts.join("");
+    } else {
+      text = text.replace(",", ".");
+    }
+  }
+
+  const number = Number(text);
+
+  return Number.isFinite(number) ? number : null;
 };
 
 export const calculateDifference = (objective, produced) => {
-  const o = toNumber(objective),
-    p = toNumber(produced);
+  const o = toNumber(objective);
+  const p = toNumber(produced);
+
   return o === null || p === null ? null : p - o;
 };
 
-/** Retourne un ratio (ex: -0.08). Null si l'objectif est nul ou absent. */
 export const calculateDifferencePercentage = (objective, produced) => {
-  const o = toNumber(objective),
-    p = toNumber(produced);
+  const o = toNumber(objective);
+  const p = toNumber(produced);
+
   return o === null || p === null || o === 0 ? null : (p - o) / o;
 };
 
 export const calculateCumulative = (values) =>
-  values.reduce((sum, v) => sum + (toNumber(v) ?? 0), 0);
+  values.reduce((sum, value) => sum + (toNumber(value) ?? 0), 0);
 
-/**
- * L160% — RÈGLE À CONFIRMER (voir docs/transformation-rules.md).
- * Hypothèse : quantité produite / quantité planifiée.
- */
 export const calculateL160 = (produced, target) => {
-  const p = toNumber(produced),
-    t = toNumber(target);
+  const p = toNumber(produced);
+  const t = toNumber(target);
+
   return p === null || t === null || t === 0 ? null : p / t;
+};
+
+export const dailyL160 = (planned, produced) => {
+  const g = toNumber(planned) ?? 0;
+  const h = toNumber(produced) ?? 0;
+
+  if (g === 0 && h === 0) {
+    return null;
+  }
+
+  const gap = g === 0 ? 1 : Math.min(Math.abs(h - g) / g, 1);
+
+  return Math.abs(gap - 1);
 };
