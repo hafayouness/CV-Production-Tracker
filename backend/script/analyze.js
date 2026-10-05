@@ -1,3 +1,4 @@
+// Usage : npm run analyze -- "Planning.xlsx" "Declaration.xlsx"
 import ExcelJS from "exceljs";
 import { cellValue } from "../utils/excelUtils.js";
 

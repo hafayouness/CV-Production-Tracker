@@ -11,126 +11,99 @@ const fill = (argb) => ({
   pattern: "solid",
   fgColor: { argb },
 });
+const FIRST_DAY = 4,
+  CUMUL = 10,
+  ROOT = 13;
 
+/** Reproduit la disposition de la feuille W06 : A projet, B carrousel, C type, D:I jours, J cumul, M root cause. */
 export async function generateDeclarationExcel(data, outDir, fileName) {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet(data.week, {
-    views: [{ state: "frozen", ySplit: 3, xSplit: 3 }],
+    views: [{ state: "frozen", ySplit: 2, xSplit: 3 }],
   });
-  const nDays = data.days.length,
-    firstDay = 4,
-    lastDay = 3 + nDays,
-    cumulCol = lastDay + 1;
   ws.columns = [
     { width: 14 },
-    { width: 18 },
-    { width: 16 },
+    { width: 28 },
+    { width: 14 },
     ...data.days.map(() => ({ width: 11 })),
-    { width: 12 },
+    { width: 11 },
+    { width: 8 },
+    { width: 3 },
+    { width: 45 },
   ];
-  const L = (n) => ws.getColumn(n).letter;
+  const L = (c) => ws.getColumn(c).letter;
 
-  ws.mergeCells(1, 1, 1, cumulCol);
-  const title = ws.getCell("A1");
-  title.value = `Déclaration CV - ${data.week}`;
-  title.font = { bold: true, size: 14, color: { argb: "FFFFFFFF" } };
-  title.fill = fill(NAVY);
-  ws.getRow(1).height = 26;
-
-  [
-    "Projet",
-    "Carrousel",
-    "Type",
-    ...data.days.map((d) => data.dayLabels[d]),
-    "Cumul",
-  ].forEach((h, i) => {
-    const c = ws.getRow(3).getCell(i + 1);
-    c.value = h;
-    c.border = border;
-    c.fill = fill(NAVY);
-    c.font = { bold: true, color: { argb: "FFFFFFFF" } };
-    c.alignment = { horizontal: "center", vertical: "middle" };
+  ws.getCell("D1").value =
+    `Suivi de déclaration FG CW ${data.week.replace(/^W/i, "")}`;
+  ws.getCell("D1").font = { bold: true, size: 14 };
+  const headers = { 3: "Type", 10: "Cumul", 13: "Root cause" };
+  data.days.forEach((d, i) => {
+    headers[FIRST_DAY + i] = data.dayLabels[d];
+  });
+  Object.entries(headers).forEach(([c, h]) => {
+    const cell = ws.getCell(2, Number(c));
+    cell.value = h;
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = fill(NAVY);
+    cell.alignment = { horizontal: "center" };
+    cell.border = border;
   });
 
-  let r = 4;
+  let r = 3;
   for (const project of data.projects) {
     const projectStart = r;
     for (const car of project.carousels) {
-      const o = r,
-        m = r + 1;
-      const a = L(firstDay),
-        b = L(lastDay),
-        cu = L(cumulCol);
-      const ratio = (num, den) =>
-        `IF(OR(${num}="",N(${den})=0),"",${num}/${den})`;
+      const [o, p, e, pc, l] = [r, r + 1, r + 2, r + 3, r + 4];
       car.lines.forEach((line, i) => {
         const row = ws.getRow(r + i);
         row.getCell(3).value = line.type;
-        const cellFor = (cl, isCumul) => {
-          const mc = `${cl}${m}`,
-            oc = `${cl}${o}`;
-          if (line.type === "Ecart")
-            return {
-              formula: isCumul
-                ? `IF(N(${mc})=0,"",${mc}-${oc})`
-                : `IF(${mc}="","",${mc}-${oc})`,
-            };
-          if (line.type === "Ecart en %")
-            return {
-              formula: `IF(OR(${isCumul ? `N(${mc})=0` : `${mc}=""`},N(${oc})=0),"",(${mc}-${oc})/${oc})`,
-            };
-          if (line.type === "L160%")
-            return {
-              formula: isCumul
-                ? `IF(OR(N(${mc})=0,N(${oc})=0),"",${mc}/${oc})`
-                : ratio(mc, oc),
-            };
-          return null;
-        };
         data.days.forEach((d, k) => {
-          const cl = L(firstDay + k);
-          row.getCell(firstDay + k).value =
-            cellFor(cl, false) ?? line.values[d];
+          const c = row.getCell(FIRST_DAY + k),
+            cl = L(FIRST_DAY + k);
+          if (line.type === "Ecart")
+            c.value = { formula: `IF(${cl}${p}=0,"-",${cl}${p}-${cl}${o})` };
+          else if (line.type === "Ecart en %")
+            c.value = { formula: `IFERROR(${cl}${e}/${cl}${o},"")` };
+          else c.value = line.values[d];
         });
-        row.getCell(cumulCol).value = ["Objectif", "Qte produite"].includes(
-          line.type,
-        )
-          ? { formula: `SUM(${a}${r + i}:${b}${r + i})` }
-          : cellFor(cu, true);
-        for (let c = 1; c <= lastCol(cumulCol); c++) {
+        const j = row.getCell(CUMUL),
+          a = L(FIRST_DAY),
+          b = L(FIRST_DAY + data.days.length - 1),
+          jl = L(CUMUL);
+        if (line.type === "Objectif" || line.type === "Qte produite")
+          j.value = { formula: `SUM(${a}${r + i}:${b}${r + i})` };
+        if (line.type === "Ecart")
+          j.value = { formula: `IF(${jl}${p}=0,"-",${jl}${p}-${jl}${o})` };
+        if (line.type === "Ecart en %")
+          j.value = { formula: `IFERROR(${jl}${e}/${jl}${o},"")` };
+        for (let c = 1; c <= CUMUL; c++) {
           const cell = row.getCell(c);
           cell.border = border;
-          if (c >= firstDay) {
+          if (c >= FIRST_DAY) {
             cell.alignment = { horizontal: "center" };
-            cell.numFmt = line.type.includes("%") ? "0%" : "0";
+            cell.numFmt = /%/.test(line.type) ? "0%" : "0";
           }
           if (line.type === "Objectif") cell.fill = fill(BLUE_SOFT);
-          if (c === cumulCol) cell.font = { bold: true };
         }
+        row.getCell(CUMUL).font = { bold: true };
       });
-      ws.mergeCells(o, 2, r + car.lines.length - 1, 2);
-      const cc = ws.getCell(o, 2);
-      cc.value = car.name;
-      cc.alignment = {
-        vertical: "middle",
-        horizontal: "center",
-        wrapText: true,
-      };
+      ws.mergeCells(o, 2, l, 2);
+      ws.mergeCells(o, ROOT, l, ROOT);
+      Object.assign(ws.getCell(o, 2), {
+        value: car.name,
+        alignment: { vertical: "middle", horizontal: "center", wrapText: true },
+      });
+      ws.getCell(o, ROOT).alignment = { vertical: "top", wrapText: true };
       r += car.lines.length;
     }
     ws.mergeCells(projectStart, 1, r - 1, 1);
-    const pc = ws.getCell(projectStart, 1);
-    pc.value = project.name;
-    pc.font = { bold: true };
-    pc.fill = fill(GREY);
-    pc.alignment = { vertical: "middle", horizontal: "center" };
+    const pcell = ws.getCell(projectStart, 1);
+    pcell.value = project.name;
+    pcell.font = { bold: true };
+    pcell.fill = fill(GREY);
+    pcell.alignment = { vertical: "middle", horizontal: "center" };
   }
-  ws.autoFilter = {
-    from: { row: 3, column: 1 },
-    to: { row: 3, column: cumulCol },
-  };
   const full = path.join(outDir, fileName);
   await wb.xlsx.writeFile(full);
   return full;
 }
-const lastCol = (n) => n;
